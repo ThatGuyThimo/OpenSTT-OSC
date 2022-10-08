@@ -1,0 +1,9 @@
+git+https://github.com/openai/whisper.git
+PyAudio ~= 0.2.12
+python-osc ~= 1.8.0
+
+# PyTorch for Windows and Linux, Cuda 11.6
+--extra-index-url https://download.pytorch.org/whl/cu116
+torch
+torchvision
+torchaudio
