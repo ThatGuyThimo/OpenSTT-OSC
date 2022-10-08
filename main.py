@@ -20,8 +20,8 @@ PYstream = ""
 model = whisper.load_model("base") # model = whisper.load_model("base")
 translateSpeach = False
 chosenLanguage =  None
-languages = {"Autodetect": None, "English": "en", "Dutch": "nl", "German": "de", "Japanese": "ja", "Chinese": "zh", "Spanish": "es", "Italian": "it", "Russian": "ru", "Swedish": "sv", "Norwegian": "no"}
-languagesDropDown = ["Autodetect", "English", "Dutch", "German", "Japanese", "Chinese", "Spanish" , "Italian", "Russian" , "Swedish" , "Norwegian"]
+languages = {"Autodetect": None, "English": "en", "Dutch": "nl", "German": "de", "Japanese": "ja", "Chinese": "zh", "Spanish": "es", "Italian": "it", "Russian": "ru", "Swedish": "sv", "Norwegian": "no", "Icelandic": "is"}
+languagesDropDown = ["Autodetect", "English", "Dutch", "German", "Japanese", "Chinese", "Spanish" , "Italian", "Russian" , "Swedish" , "Norwegian", "Icelandic"]
 
 
 ip = "127.0.0.1"
@@ -60,7 +60,7 @@ def getLanguage(selection):
     global languages
     global chosenLanguage
     chosenLanguage = languages[selection]
-    print(chosenLanguage)
+    # print(chosenLanguage)
 
 def getInput(selection):
     global dictionary
@@ -108,7 +108,7 @@ def STT():
 
                 stream = PYstream.open(format=pyaudio.paInt16, channels=1, input_device_index=deviceId, rate=44100, input=True, frames_per_buffer=1024)
                 recording = True
-                print("ran")
+                # print("ran")
 
             else:
                 data = stream.read(1024)
@@ -158,12 +158,12 @@ def STT():
                             if(chosenLanguage == None):
                                 # detect the spoken language
                                 _, probs = model.detect_language(mel)
-                                print(f"Detected language: {max(probs, key=probs.get)}")
+                                # print(f"Detected language: {max(probs, key=probs.get)}")
                                 textbox.insert(INSERT,"\n-" + f"{max(probs, key=probs.get)}" + " " + result.text)
                             else:
                                 textbox.insert(INSERT,"\n-" + result.text)
 
-                            print(result.text)
+                            # print(result.text)
                             textbox.see(END)
                             client.send_message("/chatbox/input", (result.text, True))  
                             frames = []
@@ -230,7 +230,7 @@ startStopButton.grid(column=1, row=9, sticky="W")
 
 ttk.Label(mainframe, text="Input:").grid(column=1, row=1, sticky="SW")
 optionMenu.grid(column=1, row=2, sticky="NW")
-ttk.Label(mainframe, text="Translate speach (EN ONLY):").grid(column=1, row=3, sticky="SW")
+ttk.Label(mainframe, text="Translate speech (EN ONLY):").grid(column=1, row=3, sticky="SW")
 checkBox.grid(column=1, row=4, sticky="SW")
 ttk.Label(mainframe, text="Spoken language:").grid(column=1, row=5, sticky="SW")
 optionMenuLanguage.grid(column=1, row=6, sticky="NW")
