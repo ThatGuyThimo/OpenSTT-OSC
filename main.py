@@ -1,3 +1,6 @@
+from glob import glob
+from imaplib import Commands
+from multiprocessing.connection import Client
 from tkinter import scrolledtext
 import whisper
 import pyaudio
@@ -24,11 +27,6 @@ languages = {"Autodetect": None, "English": "en", "Dutch": "nl", "German": "de",
 languagesDropDown = ["Autodetect", "English", "Dutch", "German", "Japanese", "Chinese", "Spanish" , "Italian", "Russian" , "Swedish" , "Norwegian", "Icelandic"]
 
 
-ip = "127.0.0.1"
-port = 9000
-client = SimpleUDPClient(ip, port)  # Create client
-
-
 p = pyaudio.PyAudio()
 
 info = p.get_host_api_info_by_index(0)
@@ -46,6 +44,12 @@ for i in range(0, numdevices):
         devices.append(p.get_device_info_by_host_api_device_index(0, i).get('name'))
         dictionary[p.get_device_info_by_host_api_device_index(0, i).get('name')] = i
 p.terminate()
+
+def setOSCClient():
+    global ip
+    global port
+    global client
+    client = SimpleUDPClient(ip.get(), port.get()) 
 
 def toggleTranslate():
     global translateVar
@@ -206,14 +210,17 @@ root.grid_columnconfigure(0, weight=1)
 root.grid_rowconfigure(0, weight=1)
 root.resizable(width = False, height = False)
 
-textbox = scrolledtext.ScrolledText(mainframe, width=50, height=10)
+textbox = scrolledtext.ScrolledText(mainframe, width=70, height=20)
 optionMenu = ttk.OptionMenu(mainframe, StringVar(root, defaultDevice['name']), defaultDevice['name'],  *devices, command=getInput)
 optionMenuLanguage = ttk.OptionMenu(mainframe, StringVar(root, languagesDropDown[0]), languagesDropDown[0],  *languagesDropDown, command=getLanguage)
-gate = StringVar(mainframe, 1500)
 statusLabel = ttk.Label(mainframe, foreground="Red",text=f"Running: {running}")
 voiceActivityLabel = ttk.Label(mainframe, foreground="Red",text=f"Voice activity: {talking}")
 startStopButton = ttk.Button(mainframe, text="Start", command=startToggle)
 
+ip = StringVar(mainframe, "127.0.0.1")
+port = IntVar(mainframe, 9000)
+client = SimpleUDPClient("127.0.0.1", 9000) 
+gate = StringVar(mainframe, 1500)
 style = ttk.Style()
 
 translateVar = IntVar()
@@ -224,9 +231,8 @@ textbox.insert(INSERT,"- First transcription might be slow.\n- This program uses
 
 
 style.configure("startButton", foreground="white", background="Green")
-style.configure("stopButton", foreground="white", background="Red")
 
-startStopButton.grid(column=1, row=9, sticky="W")
+startStopButton.grid(column=1, row=14, sticky="W")
 
 ttk.Label(mainframe, text="Input:").grid(column=1, row=1, sticky="SW")
 optionMenu.grid(column=1, row=2, sticky="NW")
@@ -234,13 +240,17 @@ ttk.Label(mainframe, text="Translate speech (EN ONLY):").grid(column=1, row=3, s
 checkBox.grid(column=1, row=4, sticky="SW")
 ttk.Label(mainframe, text="Spoken language:").grid(column=1, row=5, sticky="SW")
 optionMenuLanguage.grid(column=1, row=6, sticky="NW")
-ttk.Label(mainframe, text="Input sensitivity (gate):").grid(column=1, row=7, sticky="SW")
-# ttk.Label(mainframe, text="Port:").grid(column=1, row=3, sticky="SW")
-ttk.Entry(mainframe, text=gate).grid(column=1, row=8, sticky="NWE")
+ttk.Label(mainframe, text="Ip:").grid(column=1, row=7, sticky="SW")
+ttk.Entry(mainframe, text=ip).grid(column=1, row=8, sticky="NWE")
+ttk.Label(mainframe, text="Port:").grid(column=1, row=9, sticky="SW")
+ttk.Entry(mainframe, text=port).grid(column=1, row=10, sticky="NWE")
+ttk.Button(mainframe, text="Set OSC Parameters", command=setOSCClient).grid(column=1, row=11, sticky="SW")
+ttk.Label(mainframe, text="Input sensitivity (gate):").grid(column=1, row=12, sticky="SW")
+ttk.Entry(mainframe, text=gate).grid(column=1, row=13, sticky="NWE")
 ttk.Label(mainframe, text="Output:").grid(column=2, row=1, sticky="NWSE")
-statusLabel.grid(column=3, row=9, sticky="W")
-voiceActivityLabel.grid(column=2, row=9, sticky="W")
-textbox.grid(column=2, row=2, columnspan=2, rowspan=7, sticky="NWSE")
+statusLabel.grid(column=3, row=14, sticky="W")
+voiceActivityLabel.grid(column=2, row=14, sticky="W")
+textbox.grid(column=2, row=2, columnspan=2, rowspan=11, sticky="NWSE")
 
 
 for child in mainframe.winfo_children(): 
