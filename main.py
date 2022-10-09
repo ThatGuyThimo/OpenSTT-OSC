@@ -45,6 +45,19 @@ for i in range(0, numdevices):
         dictionary[p.get_device_info_by_host_api_device_index(0, i).get('name')] = i
 p.terminate()
 
+
+class LogBox:
+    def __init__(self, textbox: Text) -> None:
+        self._textbox = textbox
+        self._textbox.configure(state='disabled')
+
+    def insert(self, text: str) -> None:
+        self._textbox.configure(state='normal')
+        self._textbox.insert(END, text)
+        self._textbox.configure(state='disabled')
+        self._textbox.see(END)
+
+
 def setOSCClient():
     global ip
     global port
@@ -89,7 +102,6 @@ def STT():
         global recording
         global deviceId
         global max_value
-        global textbox
         global timestamp
         global talking
         global frames
@@ -163,12 +175,11 @@ def STT():
                                 # detect the spoken language
                                 _, probs = model.detect_language(mel)
                                 # print(f"Detected language: {max(probs, key=probs.get)}")
-                                textbox.insert(INSERT,"\n-" + f"{max(probs, key=probs.get)}" + " " + result.text)
+                                textbox.insert("\n-" + f"{max(probs, key=probs.get)}" + " " + result.text)
                             else:
-                                textbox.insert(INSERT,"\n-" + result.text)
+                                textbox.insert("\n-" + result.text)
 
                             # print(result.text)
-                            textbox.see(END)
                             client.send_message("/chatbox/input", (result.text, True))  
                             frames = []
                             
@@ -210,7 +221,8 @@ root.grid_columnconfigure(0, weight=1)
 root.grid_rowconfigure(0, weight=1)
 root.resizable(width = False, height = False)
 
-textbox = scrolledtext.ScrolledText(mainframe, width=70, height=20)
+textboxItem = scrolledtext.ScrolledText(mainframe, width=70, height=20, state="disabled")
+textbox = LogBox(textboxItem)
 optionMenu = ttk.OptionMenu(mainframe, StringVar(root, defaultDevice['name']), defaultDevice['name'],  *devices, command=getInput)
 optionMenuLanguage = ttk.OptionMenu(mainframe, StringVar(root, languagesDropDown[0]), languagesDropDown[0],  *languagesDropDown, command=getLanguage)
 statusLabel = ttk.Label(mainframe, foreground="Red",text=f"Running: {running}")
@@ -226,7 +238,7 @@ style = ttk.Style()
 translateVar = IntVar()
 checkBox = ttk.Checkbutton(mainframe, variable=translateVar, command=toggleTranslate)
 
-textbox.insert(INSERT,"- First transcription might be slow.\n- This program uses Cuda.\n  and might impact performance.\n- Translation is not very accurate.")
+textbox.insert("- First transcription might be slow.\n- This program uses Cuda.\n  and might impact performance.\n- Translation is not very accurate.")
 
 
 
@@ -250,7 +262,7 @@ ttk.Entry(mainframe, text=gate).grid(column=1, row=13, sticky="NWE")
 ttk.Label(mainframe, text="Output:").grid(column=2, row=1, sticky="NWSE")
 statusLabel.grid(column=3, row=14, sticky="W")
 voiceActivityLabel.grid(column=2, row=14, sticky="W")
-textbox.grid(column=2, row=2, columnspan=2, rowspan=11, sticky="NWSE")
+textboxItem.grid(column=2, row=2, columnspan=2, rowspan=11, sticky="NWSE")
 
 
 for child in mainframe.winfo_children(): 
