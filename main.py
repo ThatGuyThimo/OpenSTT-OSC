@@ -1,5 +1,3 @@
-from glob import glob
-from imaplib import Commands
 from multiprocessing.connection import Client
 from tkinter import scrolledtext
 import whisper
