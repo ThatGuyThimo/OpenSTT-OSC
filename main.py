@@ -234,7 +234,7 @@ style = ttk.Style()
 translateVar = IntVar()
 checkBox = ttk.Checkbutton(mainframe, variable=translateVar, command=toggleTranslate)
 
-textbox.insert("- First transcription might be slow.\n- This program uses Cuda.\n  and might impact performance.\n- Translation is not very accurate.")
+textbox.insert("- First transcription might be slow.\n- This program uses Cuda and might impact performance.\n- Translation is not very accurate.")
 
 style.configure("startButton", foreground="white", background="Green")
 
