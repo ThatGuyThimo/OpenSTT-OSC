@@ -1,6 +1,4 @@
-from glob import glob
-from imaplib import Commands
-from multiprocessing.connection import Client
+from dataclasses import dataclass, field
 from tkinter import scrolledtext
 import whisper
 import pyaudio
@@ -12,14 +10,7 @@ from pythonosc.udp_client import SimpleUDPClient
 from array import array
 
 
-max_value = 0
-recording = False
 running = False
-timestamp = time.time() -1
-talking = False
-frames = []
-stream = ""
-PYstream = ""
 model = whisper.load_model("base") # model = whisper.load_model("base")
 translateSpeach = False
 chosenLanguage =  None
@@ -96,119 +87,124 @@ def startToggle():
         running = False
         startStopButton['text'] = "Start"
 
-def STT():
+
+@dataclass
+class State:
+    PYstream: pyaudio.PyAudio = field(default_factory=pyaudio.PyAudio)
+    stream: pyaudio.Stream = None
+    talking: bool = False
+    recording: bool = False
+    canStopTimestamp: float = field(default_factory=lambda: time.time() + 1)
+    frames: list[bytes] = field(default_factory=list)
+
+
+def STT(state: State):
     try:
-        global running
-        global recording
-        global deviceId
-        global max_value
-        global timestamp
-        global talking
-        global frames
-        global stream
-        global PYstream
-        global gate
-        global thresHold
-        global translateSpeach
-        global chosenLanguage
-        global model
-        global statusLabel
-
-
-        if (running == True):
-            statusLabel['text'] = f"running: {running}"
-            statusLabel['foreground'] = "Green" 
-            thresHold = int(gate.get())
-            if (recording == False):
-                PYstream = pyaudio.PyAudio()
-
-                stream = PYstream.open(format=pyaudio.paInt16, channels=1, input_device_index=deviceId, rate=44100, input=True, frames_per_buffer=1024)
-                recording = True
-                # print("ran")
-
-            else:
-                data = stream.read(1024)
-                as_ints = array('h', data)
-                max_value = max(as_ints)
-
-                # print(timestamp - time.time())
-
-                if (timestamp < time.time()):
-                    # print(talking)
-                    if (talking == True):
-                        talking = False
-                        client.send_message("/chatbox/typing", False)  
-                        voiceActivityLabel['text'] = f"Voice activity: {talking}"
-                        voiceActivityLabel['foreground'] = "Red" 
-                        if (recording == True):
-                            recording = False
-                            stream.stop_stream()
-                            stream.close()
-                            PYstream.terminate()
-
-                            soundFile = wave.open("rec.wav", "wb")
-                            soundFile.setnchannels(1)
-                            soundFile.setsampwidth(PYstream.get_sample_size(pyaudio.paInt16))
-                            soundFile.setframerate(44100)
-                            soundFile.writeframes(b''.join(frames))
-                            soundFile.close()
-
-                            # load audio and pad/trim it to fit 30 seconds
-                            audio = whisper.load_audio("rec.wav")
-                            audio = whisper.pad_or_trim(audio)
-
-                            # make log-Mel spectrogram and move to the same device as the model
-                            mel = whisper.log_mel_spectrogram(audio).to(model.device)
-
-                            # decode the audio
-                            if (translateSpeach == True):
-                                options = whisper.DecodingOptions(task="translate", language=chosenLanguage)
-                            else:
-                                options = whisper.DecodingOptions(language=chosenLanguage)
-
-
-
-                            result = whisper.decode(model, mel, options)
-
-                            # print the recognized text
-                            if(chosenLanguage == None):
-                                # detect the spoken language
-                                _, probs = model.detect_language(mel)
-                                # print(f"Detected language: {max(probs, key=probs.get)}")
-                                textbox.insert("\n-" + f"{max(probs, key=probs.get)}" + " " + result.text)
-                            else:
-                                textbox.insert("\n-" + result.text)
-
-                            # print(result.text)
-                            client.send_message("/chatbox/input", (result.text, True))  
-                            frames = []
-                            
-                        else:
-                            PYstream = pyaudio.PyAudio()
-                            stream = PYstream.open(format=pyaudio.paInt16, channels=1, input_device_index=6, rate=44100, input=True, frames_per_buffer=1024)
-                            recording = True
-
-                
-                if (talking == True):
-                    frames.append(data)
-                
-                if (thresHold != ""):
-                    if (max_value > thresHold):
-
-                        # print(max_value)
-                        timestamp = time.time() + 1 
-
-                        if (talking == False):
-                            talking = True
-                            client.send_message("/chatbox/typing", True)  
-                            voiceActivityLabel['text'] = f"Voice activity: {talking}"
-                            voiceActivityLabel['foreground'] = "Green" 
-        else:
+        if (running is not True):
             statusLabel['text'] = f"running: {running}"
             statusLabel['foreground'] = "Red" 
+            root.after(10, STT, state)
+            return
+
+        statusLabel['text'] = f"running: {running}"
+        statusLabel['foreground'] = "Green" 
+
+        try:
+            thresHold = int(gate.get())
+            if thresHold <= 0:
+                thresHold = 1
+        except ValueError:
+            thresHold = 1
+
+        if (state.recording == False):
+            state.PYstream = pyaudio.PyAudio()
+
+            state.stream = state.PYstream.open(format=pyaudio.paInt16, channels=1, input_device_index=deviceId, rate=44100, input=True, frames_per_buffer=1024)
+            state.recording = True
+            root.after(10, STT, state)
+            return
+
+        data = state.stream.read(1024)
+        as_ints = array('h', data)
+        max_value = max(as_ints)
+
+        # print(timestamp - time.time())
+
+        if (state.canStopTimestamp < time.time()):
+            # print(talking)
+            if (state.talking == True):
+                state.talking = False
+                client.send_message("/chatbox/typing", False)  
+                voiceActivityLabel['text'] = f"Voice activity: {state.talking}"
+                voiceActivityLabel['foreground'] = "Red" 
+                if (state.recording == True):
+                    state.recording = False
+                    state.stream.stop_stream()
+                    state.stream.close()
+                    state.PYstream.terminate()
+
+                    soundFile = wave.open("rec.wav", "wb")
+                    soundFile.setnchannels(1)
+                    soundFile.setsampwidth(state.PYstream.get_sample_size(pyaudio.paInt16))
+                    soundFile.setframerate(44100)
+                    soundFile.writeframes(b''.join(state.frames))
+                    soundFile.close()
+
+                    # load audio and pad/trim it to fit 30 seconds
+                    audio = whisper.load_audio("rec.wav")
+                    audio = whisper.pad_or_trim(audio)
+
+                    # make log-Mel spectrogram and move to the same device as the model
+                    mel = whisper.log_mel_spectrogram(audio).to(model.device)
+
+                    # decode the audio
+                    if (translateSpeach == True):
+                        options = whisper.DecodingOptions(task="translate", language=chosenLanguage)
+                    else:
+                        options = whisper.DecodingOptions(language=chosenLanguage)
+
+
+
+                    result = whisper.decode(model, mel, options)
+
+                    # print the recognized text
+                    if(chosenLanguage == None):
+                        # detect the spoken language
+                        _, probs = model.detect_language(mel)
+                        # print(f"Detected language: {max(probs, key=probs.get)}")
+                        textbox.insert("\n-" + f"{max(probs, key=probs.get)}" + " " + result.text)
+                    else:
+                        textbox.insert("\n-" + result.text)
+
+                    # print(result.text)
+                    client.send_message("/chatbox/input", (result.text, True))  
+                    state.frames = []
+                    
+                else:
+                    PYstream = pyaudio.PyAudio()
+                    state.stream = PYstream.open(format=pyaudio.paInt16, channels=1, input_device_index=6, rate=44100, input=True, frames_per_buffer=1024)
+                    state.recording = True
+
+        
+        if (state.talking == True):
+            state.frames.append(data)
+        
+        if (thresHold != ""):
+            if (max_value > thresHold):
+
+                # print(max_value)
+                state.canStopTimestamp = time.time() + 1 
+
+                if (state.talking == False):
+                    state.talking = True
+                    client.send_message("/chatbox/typing", True)  
+                    voiceActivityLabel['text'] = f"Voice activity: {state.talking}"
+                    voiceActivityLabel['foreground'] = "Green" 
+
     except KeyboardInterrupt:
         pass
-    root.after(10, STT)
+
+    root.after(10, STT, state)
 
 
 root = Tk()
@@ -226,7 +222,7 @@ textbox = LogBox(textboxItem)
 optionMenu = ttk.OptionMenu(mainframe, StringVar(root, defaultDevice['name']), defaultDevice['name'],  *devices, command=getInput)
 optionMenuLanguage = ttk.OptionMenu(mainframe, StringVar(root, languagesDropDown[0]), languagesDropDown[0],  *languagesDropDown, command=getLanguage)
 statusLabel = ttk.Label(mainframe, foreground="Red",text=f"Running: {running}")
-voiceActivityLabel = ttk.Label(mainframe, foreground="Red",text=f"Voice activity: {talking}")
+voiceActivityLabel = ttk.Label(mainframe, foreground="Red",text=f"Voice activity: False")
 startStopButton = ttk.Button(mainframe, text="Start", command=startToggle)
 
 ip = StringVar(mainframe, "127.0.0.1")
@@ -238,9 +234,7 @@ style = ttk.Style()
 translateVar = IntVar()
 checkBox = ttk.Checkbutton(mainframe, variable=translateVar, command=toggleTranslate)
 
-textbox.insert("- First transcription might be slow.\n- This program uses Cuda.\n  and might impact performance.\n- Translation is not very accurate.")
-
-
+textbox.insert("- First transcription might be slow.\n- This program uses Cuda and might impact performance.\n- Translation is not very accurate.")
 
 style.configure("startButton", foreground="white", background="Green")
 
@@ -270,5 +264,5 @@ for child in mainframe.winfo_children():
 
 # root.bind("<Return>", start)
 
-root.after(100, STT)
+root.after(100, STT, State())
 root.mainloop()
