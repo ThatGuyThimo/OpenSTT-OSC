@@ -2,6 +2,7 @@ main.spec
 OpenSTT-OSC.json
 rec.wav
 script.spec
+output
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
