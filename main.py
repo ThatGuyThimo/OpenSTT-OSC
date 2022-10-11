@@ -14,8 +14,9 @@ from array import array
 
 
 def start_audio_stream(
+    deviceId: int,
     pyAudio: Optional[pyaudio.PyAudio] = None,
-    stream: Optional[pyaudio.Stream] = None
+    stream: Optional[pyaudio.Stream] = None,
 ) -> tuple[pyaudio.PyAudio, pyaudio.Stream]:
     # Stop the previous PyAudio and stream if they're supplied
     # Killing PyAudio completely is required to switch to a new device
@@ -25,19 +26,13 @@ def start_audio_stream(
     if pyAudio is not None:
         pyAudio.terminate()
 
-    time.sleep(0.1)
-
     # Start the new stream
-    print("NEW")
     newPyAudio = pyaudio.PyAudio()
     newStream = newPyAudio.open(format=pyaudio.paInt16, channels=1, input_device_index=deviceId, rate=44100, input=True, frames_per_buffer=1024)
     return (newPyAudio, newStream)
 
 
-running = False
 model = whisper.load_model("base") # model = whisper.load_model("base")
-translateSpeach = False
-chosenLanguage =  None
 languages = {"Autodetect": None, "English": "en", "Dutch": "nl", "German": "de", "Japanese": "ja", "Chinese": "zh", "Spanish": "es", "Italian": "it", "Russian": "ru", "Swedish": "sv", "Norwegian": "no", "Icelandic": "is"}
 languagesDropDown = ["Autodetect", "English", "Dutch", "German", "Japanese", "Chinese", "Spanish" , "Italian", "Russian" , "Swedish" , "Norwegian", "Icelandic"]
 events: list["UserEvent"] = []
@@ -91,6 +86,12 @@ class State:
     canStopTimestamp: float = field(default_factory=lambda: time.time() + 1)
     frames: list[bytes] = field(default_factory=list)
 
+    running = False
+    translateSpeach = False
+    chosenLanguage =  None
+
+    deviceId = deviceId
+
 
 def handleEvent(event: UserEvent, state: State):
     if event == UserEvent.UPDATE_OSC_CLIENT:
@@ -98,32 +99,25 @@ def handleEvent(event: UserEvent, state: State):
         client = SimpleUDPClient(ip.get(), port.get()) 
 
     if event == UserEvent.TOGGLE_TRANSLATE:
-        global translateSpeach
         if (translateVar.get() == 0):
-            translateSpeach = False
+            state.translateSpeach = False
         else:
-            translateSpeach = True 
+            state.translateSpeach = True 
 
     if event == UserEvent.GET_LANGUAGE:
-        global chosenLanguage
-        chosenLanguage = languages[languageVariable.get()]
-        # print(chosenLanguage)
+        state.chosenLanguage = languages[languageVariable.get()]
 
     if event == UserEvent.GET_INPUT:
-        global deviceId
-        deviceId = dictionary[deviceVariable.get()]
-        state.PYstream, state.stream = start_audio_stream(state.PYstream, state.stream)
+        state.deviceId = dictionary[deviceVariable.get()]
+        state.PYstream, state.stream = start_audio_stream(state.deviceId, state.PYstream, state.stream)
 
     if event == UserEvent.START_TOGGLE:
-        global startStopButton
-        global running
-
-        if (running == False):
-            running = True
+        if (state.running == False):
+            state.running = True
             startStopButton['text'] = "Stop"
 
         else:
-            running = False
+            state.running = False
             startStopButton['text'] = "Start"
 
 
@@ -133,13 +127,13 @@ def STT(state: State):
         handleEvent(events.pop(), state)
 
     try:
-        if (running is not True):
-            statusLabel['text'] = f"running: {running}"
+        if (state.running is not True):
+            statusLabel['text'] = f"running: {state.running}"
             statusLabel['foreground'] = "Red" 
             root.after(10, STT, state)
             return
 
-        statusLabel['text'] = f"running: {running}"
+        statusLabel['text'] = f"running: {state.running}"
         statusLabel['foreground'] = "Green" 
 
         try:
@@ -175,7 +169,7 @@ def STT(state: State):
                     # state.stream.stop_stream()
                     # state.stream.close()
                     # state.PYstream.terminate()
-                    state.PYstream, state.stream = start_audio_stream(state.PYstream, state.stream)
+                    state.PYstream, state.stream = start_audio_stream(state.deviceId, state.PYstream, state.stream)
 
                     soundFile = wave.open("rec.wav", "wb")
                     soundFile.setnchannels(1)
@@ -192,17 +186,17 @@ def STT(state: State):
                     mel = whisper.log_mel_spectrogram(audio).to(model.device)
 
                     # decode the audio
-                    if (translateSpeach == True):
-                        options = whisper.DecodingOptions(task="translate", language=chosenLanguage)
+                    if (state.translateSpeach == True):
+                        options = whisper.DecodingOptions(task="translate", language=state.chosenLanguage)
                     else:
-                        options = whisper.DecodingOptions(language=chosenLanguage)
+                        options = whisper.DecodingOptions(language=state.chosenLanguage)
 
 
 
                     result = whisper.decode(model, mel, options)
 
                     # print the recognized text
-                    if(chosenLanguage == None):
+                    if(state.chosenLanguage == None):
                         # detect the spoken language
                         _, probs = model.detect_language(mel)
                         # print(f"Detected language: {max(probs, key=probs.get)}")
@@ -259,7 +253,7 @@ textboxItem = scrolledtext.ScrolledText(mainframe, width=70, height=20, state="d
 textbox = LogBox(textboxItem)
 optionMenu = ttk.OptionMenu(mainframe, deviceVariable, defaultDevice['name'],  *devices, command=lambda _: events.append(UserEvent.GET_INPUT))
 optionMenuLanguage = ttk.OptionMenu(mainframe, languageVariable, languagesDropDown[0],  *languagesDropDown, command=lambda _: events.append(UserEvent.GET_LANGUAGE))
-statusLabel = ttk.Label(mainframe, foreground="Red",text=f"Running: {running}")
+statusLabel = ttk.Label(mainframe, foreground="Red",text=f"Running: False")
 voiceActivityLabel = ttk.Label(mainframe, foreground="Red",text=f"Voice activity: False")
 startStopButton = ttk.Button(mainframe, text="Start", command=lambda: events.append(UserEvent.START_TOGGLE))
 
@@ -302,6 +296,6 @@ for child in mainframe.winfo_children():
 
 # root.bind("<Return>", start)
 
-pyAudio, stream = start_audio_stream()
+pyAudio, stream = start_audio_stream(deviceId)
 root.after(100, STT, State(pyAudio, stream))
 root.mainloop()
