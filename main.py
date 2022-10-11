@@ -1,5 +1,8 @@
 from dataclasses import dataclass, field
+from enum import Enum
 from tkinter import scrolledtext
+from tracemalloc import start
+from typing import Optional
 import whisper
 import pyaudio
 import wave
@@ -10,12 +13,34 @@ from pythonosc.udp_client import SimpleUDPClient
 from array import array
 
 
+def start_audio_stream(
+    pyAudio: Optional[pyaudio.PyAudio] = None,
+    stream: Optional[pyaudio.Stream] = None
+) -> tuple[pyaudio.PyAudio, pyaudio.Stream]:
+    # Stop the previous PyAudio and stream if they're supplied
+    # Killing PyAudio completely is required to switch to a new device
+    if stream is not None:
+        stream.stop_stream()
+        stream.close()
+    if pyAudio is not None:
+        pyAudio.terminate()
+
+    time.sleep(0.1)
+
+    # Start the new stream
+    print("NEW")
+    newPyAudio = pyaudio.PyAudio()
+    newStream = newPyAudio.open(format=pyaudio.paInt16, channels=1, input_device_index=deviceId, rate=44100, input=True, frames_per_buffer=1024)
+    return (newPyAudio, newStream)
+
+
 running = False
 model = whisper.load_model("base") # model = whisper.load_model("base")
 translateSpeach = False
 chosenLanguage =  None
 languages = {"Autodetect": None, "English": "en", "Dutch": "nl", "German": "de", "Japanese": "ja", "Chinese": "zh", "Spanish": "es", "Italian": "it", "Russian": "ru", "Swedish": "sv", "Norwegian": "no", "Icelandic": "is"}
 languagesDropDown = ["Autodetect", "English", "Dutch", "German", "Japanese", "Chinese", "Spanish" , "Italian", "Russian" , "Swedish" , "Norwegian", "Icelandic"]
+events: list["UserEvent"] = []
 
 
 p = pyaudio.PyAudio()
@@ -49,56 +74,64 @@ class LogBox:
         self._textbox.see(END)
 
 
-def setOSCClient():
-    global ip
-    global port
-    global client
-    client = SimpleUDPClient(ip.get(), port.get()) 
-
-def toggleTranslate():
-    global translateVar
-    global translateSpeach
-    if (translateVar.get() == 0):
-        translateSpeach = False
-    else:
-        translateSpeach = True 
-
-
-def getLanguage(selection):
-    global languages
-    global chosenLanguage
-    chosenLanguage = languages[selection]
-    # print(chosenLanguage)
-
-def getInput(selection):
-    global dictionary
-    global deviceId
-    deviceId = dictionary[selection]
-
-def startToggle():
-    global startStopButton
-    global running
-
-    if (running == False):
-        running = True
-        startStopButton['text'] = "Stop"
-
-    else:
-        running = False
-        startStopButton['text'] = "Start"
+class UserEvent(Enum):
+    UPDATE_OSC_CLIENT = 1
+    TOGGLE_TRANSLATE = 2
+    GET_LANGUAGE = 3
+    GET_INPUT = 4
+    START_TOGGLE = 5
 
 
 @dataclass
 class State:
-    PYstream: pyaudio.PyAudio = field(default_factory=pyaudio.PyAudio)
-    stream: pyaudio.Stream = None
+    PYstream: pyaudio.PyAudio
+    stream: pyaudio.Stream
     talking: bool = False
     recording: bool = False
     canStopTimestamp: float = field(default_factory=lambda: time.time() + 1)
     frames: list[bytes] = field(default_factory=list)
 
 
+def handleEvent(event: UserEvent, state: State):
+    if event == UserEvent.UPDATE_OSC_CLIENT:
+        global client
+        client = SimpleUDPClient(ip.get(), port.get()) 
+
+    if event == UserEvent.TOGGLE_TRANSLATE:
+        global translateSpeach
+        if (translateVar.get() == 0):
+            translateSpeach = False
+        else:
+            translateSpeach = True 
+
+    if event == UserEvent.GET_LANGUAGE:
+        global chosenLanguage
+        chosenLanguage = languages[languageVariable.get()]
+        # print(chosenLanguage)
+
+    if event == UserEvent.GET_INPUT:
+        global deviceId
+        deviceId = dictionary[deviceVariable.get()]
+        state.PYstream, state.stream = start_audio_stream(state.PYstream, state.stream)
+
+    if event == UserEvent.START_TOGGLE:
+        global startStopButton
+        global running
+
+        if (running == False):
+            running = True
+            startStopButton['text'] = "Stop"
+
+        else:
+            running = False
+            startStopButton['text'] = "Start"
+
+
 def STT(state: State):
+    # Process events for the state
+    while len(events) > 0:
+        handleEvent(events.pop(), state)
+
     try:
         if (running is not True):
             statusLabel['text'] = f"running: {running}"
@@ -117,9 +150,9 @@ def STT(state: State):
             thresHold = 1
 
         if (state.recording == False):
-            state.PYstream = pyaudio.PyAudio()
+            # state.PYstream = pyaudio.PyAudio()
 
-            state.stream = state.PYstream.open(format=pyaudio.paInt16, channels=1, input_device_index=deviceId, rate=44100, input=True, frames_per_buffer=1024)
+            # state.stream = state.PYstream.open(format=pyaudio.paInt16, channels=1, input_device_index=deviceId, rate=44100, input=True, frames_per_buffer=1024)
             state.recording = True
             root.after(10, STT, state)
             return
@@ -139,9 +172,10 @@ def STT(state: State):
                 voiceActivityLabel['foreground'] = "Red" 
                 if (state.recording == True):
                     state.recording = False
-                    state.stream.stop_stream()
-                    state.stream.close()
-                    state.PYstream.terminate()
+                    # state.stream.stop_stream()
+                    # state.stream.close()
+                    # state.PYstream.terminate()
+                    state.PYstream, state.stream = start_audio_stream(state.PYstream, state.stream)
 
                     soundFile = wave.open("rec.wav", "wb")
                     soundFile.setnchannels(1)
@@ -181,6 +215,7 @@ def STT(state: State):
                     state.frames = []
                     
                 else:
+                    print("THE IMPOSSIBLE HAPPENED")
                     PYstream = pyaudio.PyAudio()
                     state.stream = PYstream.open(format=pyaudio.paInt16, channels=1, input_device_index=6, rate=44100, input=True, frames_per_buffer=1024)
                     state.recording = True
@@ -217,13 +252,16 @@ root.grid_columnconfigure(0, weight=1)
 root.grid_rowconfigure(0, weight=1)
 root.resizable(width = False, height = False)
 
+languageVariable = StringVar(root, languagesDropDown[0])
+deviceVariable = StringVar(root, defaultDevice['name'])
+
 textboxItem = scrolledtext.ScrolledText(mainframe, width=70, height=20, state="disabled")
 textbox = LogBox(textboxItem)
-optionMenu = ttk.OptionMenu(mainframe, StringVar(root, defaultDevice['name']), defaultDevice['name'],  *devices, command=getInput)
-optionMenuLanguage = ttk.OptionMenu(mainframe, StringVar(root, languagesDropDown[0]), languagesDropDown[0],  *languagesDropDown, command=getLanguage)
+optionMenu = ttk.OptionMenu(mainframe, deviceVariable, defaultDevice['name'],  *devices, command=lambda _: events.append(UserEvent.GET_INPUT))
+optionMenuLanguage = ttk.OptionMenu(mainframe, languageVariable, languagesDropDown[0],  *languagesDropDown, command=lambda _: events.append(UserEvent.GET_LANGUAGE))
 statusLabel = ttk.Label(mainframe, foreground="Red",text=f"Running: {running}")
 voiceActivityLabel = ttk.Label(mainframe, foreground="Red",text=f"Voice activity: False")
-startStopButton = ttk.Button(mainframe, text="Start", command=startToggle)
+startStopButton = ttk.Button(mainframe, text="Start", command=lambda: events.append(UserEvent.START_TOGGLE))
 
 ip = StringVar(mainframe, "127.0.0.1")
 port = IntVar(mainframe, 9000)
@@ -232,7 +270,7 @@ gate = StringVar(mainframe, 1500)
 style = ttk.Style()
 
 translateVar = IntVar()
-checkBox = ttk.Checkbutton(mainframe, variable=translateVar, command=toggleTranslate)
+checkBox = ttk.Checkbutton(mainframe, variable=translateVar, command=lambda: events.append(UserEvent.TOGGLE_TRANSLATE))
 
 textbox.insert("- First transcription might be slow.\n- This program uses Cuda and might impact performance.\n- Translation is not very accurate.")
 
@@ -250,7 +288,7 @@ ttk.Label(mainframe, text="Ip:").grid(column=1, row=7, sticky="SW")
 ttk.Entry(mainframe, text=ip).grid(column=1, row=8, sticky="NWE")
 ttk.Label(mainframe, text="Port:").grid(column=1, row=9, sticky="SW")
 ttk.Entry(mainframe, text=port).grid(column=1, row=10, sticky="NWE")
-ttk.Button(mainframe, text="Set OSC Parameters", command=setOSCClient).grid(column=1, row=11, sticky="SW")
+ttk.Button(mainframe, text="Set OSC Parameters", command=lambda: events.append(UserEvent.UPDATE_OSC_CLIENT)).grid(column=1, row=11, sticky="SW")
 ttk.Label(mainframe, text="Input sensitivity (gate):").grid(column=1, row=12, sticky="SW")
 ttk.Entry(mainframe, text=gate).grid(column=1, row=13, sticky="NWE")
 ttk.Label(mainframe, text="Output:").grid(column=2, row=1, sticky="NWSE")
@@ -264,5 +302,6 @@ for child in mainframe.winfo_children():
 
 # root.bind("<Return>", start)
 
-root.after(100, STT, State())
+pyAudio, stream = start_audio_stream()
+root.after(100, STT, State(pyAudio, stream))
 root.mainloop()
