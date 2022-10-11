@@ -18,11 +18,15 @@ LicenseFile=C:\Users\thimo\Desktop\projects\OpenSTT-OSC\LICENSE.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ;PrivilegesRequired=lowest
 OutputDir=C:\Users\thimo\Desktop\compilerOutput
-OutputBaseFilename=mysetup
-Compression=lzma
+OutputBaseFilename=OpenSTT-OSC-Installer
+Compression=lzma2/ultra64
+LZMAUseSeparateProcess=yes
+LZMADictionarySize=1048576
+LZMANumFastBytes=273
 SolidCompression=yes
 WizardStyle=modern
 ChangesEnvironment=True
+DisableProgramGroupPage=True
 
 [Dirs]
 Name: "{app}"; Permissions: everyone-modify
