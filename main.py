@@ -5,12 +5,13 @@ from tracemalloc import start
 from typing import Optional
 from tkinter import *
 from tkinter import ttk
-from pythonosc.udp_client import SimpleUDPClient
 from array import array
 import whisper
 import pyaudio
 import wave
 import time
+
+from osc_textbox_sender import OSCTextboxSender
 
 flag = False
 
@@ -37,6 +38,7 @@ model = whisper.load_model("base") # model = whisper.load_model("base")
 languages = {"Autodetect": None, "English": "en", "Dutch": "nl", "German": "de", "Japanese": "ja", "Chinese": "zh", "Spanish": "es", "Italian": "it", "Russian": "ru", "Swedish": "sv", "Norwegian": "no", "Icelandic": "is"}
 languagesDropDown = ["Autodetect", "English", "Dutch", "German", "Japanese", "Chinese", "Spanish" , "Italian", "Russian" , "Swedish" , "Norwegian", "Icelandic"]
 events: list["UserEvent"] = []
+osc_sender = OSCTextboxSender("127.0.0.1", 9000, 3)
 
 
 p = pyaudio.PyAudio()
@@ -100,8 +102,7 @@ class State:
 
 def handleEvent(event: UserEvent, state: State):
     if event == UserEvent.UPDATE_OSC_CLIENT:
-        global client
-        client = SimpleUDPClient(ip.get(), port.get()) 
+        osc_sender.set_ip_port(ip.get(), port.get())
 
     if event == UserEvent.TOGGLE_TRANSLATE:
         if (translateVar.get() == 0):
@@ -127,6 +128,8 @@ def handleEvent(event: UserEvent, state: State):
 
 
 def STT(state: State):
+    osc_sender.update()
+
     # Process events for the state
     while len(events) > 0:
         handleEvent(events.pop(), state)
@@ -166,7 +169,7 @@ def STT(state: State):
             # print(talking)
             if (state.talking == True):
                 state.talking = False
-                client.send_message("/chatbox/typing", False)  
+                osc_sender.typing = False
                 voiceActivityLabel['text'] = f"Voice activity: {state.talking}"
                 voiceActivityLabel['foreground'] = "Red" 
                 if (state.recording == True):
@@ -211,7 +214,7 @@ def STT(state: State):
                         textbox.insert("\n-" + result.text)
 
                     # print(result.text)
-                    client.send_message("/chatbox/input", (result.text, True))  
+                    osc_sender.display(result.text)
                     state.frames = []
                     
                 else:
@@ -239,7 +242,7 @@ def STT(state: State):
 
                 if (state.talking == False):
                     state.talking = True
-                    client.send_message("/chatbox/typing", True)  
+                    osc_sender.typing = True
                     voiceActivityLabel['text'] = f"Voice activity: {state.talking}"
                     voiceActivityLabel['foreground'] = "Green" 
 
@@ -272,7 +275,6 @@ startStopButton = ttk.Button(mainframe, text="Start", command=lambda: events.app
 
 ip = StringVar(mainframe, "127.0.0.1")
 port = IntVar(mainframe, 9000)
-client = SimpleUDPClient("127.0.0.1", 9000) 
 gate = StringVar(mainframe, 2000)
 style = ttk.Style()
 
