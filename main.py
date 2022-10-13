@@ -3,15 +3,16 @@ from enum import Enum
 from tkinter import scrolledtext
 from tracemalloc import start
 from typing import Optional
-import whisper
-import pyaudio
-import wave
-import time
 from tkinter import *
 from tkinter import ttk
 from pythonosc.udp_client import SimpleUDPClient
 from array import array
+import whisper
+import pyaudio
+import wave
+import time
 
+flag = False
 
 def start_audio_stream(
     deviceId: int,
@@ -85,10 +86,14 @@ class State:
     recording: bool = False
     canStopTimestamp: float = field(default_factory=lambda: time.time() + 1)
     frames: list[bytes] = field(default_factory=list)
+    bufferFrames: list[bytes] = field(default_factory=list)
 
     running = False
     translateSpeach = False
     chosenLanguage =  None
+    recBuffer = 0.5
+    rate= 44100
+    chunk = 1024
 
     deviceId = deviceId
 
@@ -151,7 +156,7 @@ def STT(state: State):
             root.after(10, STT, state)
             return
 
-        data = state.stream.read(1024)
+        data = state.stream.read(state.chunk)
         as_ints = array('h', data)
         max_value = max(as_ints)
 
@@ -171,11 +176,12 @@ def STT(state: State):
                     # state.PYstream.terminate()
                     state.PYstream, state.stream = start_audio_stream(state.deviceId, state.PYstream, state.stream)
 
+
                     soundFile = wave.open("rec.wav", "wb")
                     soundFile.setnchannels(1)
                     soundFile.setsampwidth(state.PYstream.get_sample_size(pyaudio.paInt16))
-                    soundFile.setframerate(44100)
-                    soundFile.writeframes(b''.join(state.frames))
+                    soundFile.setframerate(state.rate)
+                    soundFile.writeframes(b''.join(state.bufferFrames) + b''.join(state.frames))
                     soundFile.close()
 
                     # load audio and pad/trim it to fit 30 seconds
@@ -217,6 +223,13 @@ def STT(state: State):
         
         if (state.talking == True):
             state.frames.append(data)
+        else:
+            calcFrames = int(state.rate / state.chunk * state.recBuffer) # <= maybe move this to a place where it doesn't get called everytime
+
+            state.bufferFrames.append(data)
+
+            if (len(state.bufferFrames) > calcFrames):
+                state.bufferFrames.remove(state.bufferFrames[0])
         
         if (thresHold != ""):
             if (max_value > thresHold):
@@ -260,7 +273,7 @@ startStopButton = ttk.Button(mainframe, text="Start", command=lambda: events.app
 ip = StringVar(mainframe, "127.0.0.1")
 port = IntVar(mainframe, 9000)
 client = SimpleUDPClient("127.0.0.1", 9000) 
-gate = StringVar(mainframe, 1500)
+gate = StringVar(mainframe, 2000)
 style = ttk.Style()
 
 translateVar = IntVar()
