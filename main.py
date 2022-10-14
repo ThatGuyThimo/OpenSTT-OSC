@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from tkinter import scrolledtext
-from tracemalloc import start
 from typing import Optional
 from tkinter import *
 from tkinter import ttk
@@ -38,7 +37,7 @@ model = whisper.load_model("base") # model = whisper.load_model("base")
 languages = {"Autodetect": None, "English": "en", "Dutch": "nl", "German": "de", "Japanese": "ja", "Chinese": "zh", "Spanish": "es", "Italian": "it", "Russian": "ru", "Swedish": "sv", "Norwegian": "no", "Icelandic": "is"}
 languagesDropDown = ["Autodetect", "English", "Dutch", "German", "Japanese", "Chinese", "Spanish" , "Italian", "Russian" , "Swedish" , "Norwegian", "Icelandic"]
 events: list["UserEvent"] = []
-osc_sender = OSCTextboxSender("127.0.0.1", 9000, 3)
+osc_sender = OSCTextboxSender("127.0.0.1", 9000, 2, 7)
 
 
 p = pyaudio.PyAudio()
@@ -256,7 +255,7 @@ root = Tk()
 root.title("OpenSTT-OSC")
 
 mainframe = ttk.Frame(root, padding="3 3 12 12")
-mainframe.grid(column=0, row=0, sticky=(N, W, E, S))
+mainframe.grid(column=0, row=0, sticky="NWES")
 
 root.grid_columnconfigure(0, weight=1)
 root.grid_rowconfigure(0, weight=1)
@@ -275,7 +274,7 @@ startStopButton = ttk.Button(mainframe, text="Start", command=lambda: events.app
 
 ip = StringVar(mainframe, "127.0.0.1")
 port = IntVar(mainframe, 9000)
-gate = StringVar(mainframe, 2000)
+gate = IntVar(mainframe, 2000)
 style = ttk.Style()
 
 translateVar = IntVar()
