@@ -151,6 +151,7 @@ def handleEvent(event: UserEvent, state: State):
                 "maxWait": f"{state.maxWait}"},
                       f
             )
+            
 
 def loadConfig(state: State) -> None :
     try:
