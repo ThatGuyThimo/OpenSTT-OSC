@@ -1,18 +1,18 @@
 from dataclasses import dataclass, field
 from enum import Enum
+from os import stat
+import string
 from tkinter import scrolledtext
 from typing import Optional
 from tkinter import *
 from tkinter import ttk
 from array import array
+from osc_textbox_sender import OSCTextboxSender
 import whisper
 import pyaudio
 import wave
 import time
-
-from osc_textbox_sender import OSCTextboxSender
-
-flag = False
+import json
 
 def start_audio_stream(
     deviceId: int,
@@ -37,26 +37,8 @@ model = whisper.load_model("base") # model = whisper.load_model("base")
 languages = {"Autodetect": None, "English": "en", "Dutch": "nl", "German": "de", "Japanese": "ja", "Chinese": "zh", "Spanish": "es", "Italian": "it", "Russian": "ru", "Swedish": "sv", "Norwegian": "no", "Icelandic": "is"}
 languagesDropDown = ["Autodetect", "English", "Dutch", "German", "Japanese", "Chinese", "Spanish" , "Italian", "Russian" , "Swedish" , "Norwegian", "Icelandic"]
 events: list["UserEvent"] = []
-osc_sender = OSCTextboxSender("127.0.0.1", 9000, 2, 7)
 
 
-p = pyaudio.PyAudio()
-
-info = p.get_host_api_info_by_index(0)
-numdevices = info.get('deviceCount')
-
-devices = []
-dictionary = {}
-
-
-defaultDevice = p.get_default_input_device_info()
-deviceId = defaultDevice['index']
-
-for i in range(0, numdevices):
-    if (p.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels')) > 0:
-        devices.append(p.get_device_info_by_host_api_device_index(0, i).get('name'))
-        dictionary[p.get_device_info_by_host_api_device_index(0, i).get('name')] = i
-p.terminate()
 
 
 class LogBox:
@@ -70,6 +52,19 @@ class LogBox:
         self._textbox.configure(state='disabled')
         self._textbox.see(END)
 
+p = pyaudio.PyAudio()
+
+info = p.get_host_api_info_by_index(0)
+numdevices = info.get('deviceCount')
+
+devices = []
+dictionary = {}
+
+
+defaultDevice = p.get_default_input_device_info()
+deviceId = defaultDevice['index']
+deviceName = defaultDevice['name']
+print(defaultDevice['name'])
 
 class UserEvent(Enum):
     UPDATE_OSC_CLIENT = 1
@@ -77,6 +72,8 @@ class UserEvent(Enum):
     GET_LANGUAGE = 3
     GET_INPUT = 4
     START_TOGGLE = 5
+    SAVE = 6
+
 
 
 @dataclass
@@ -95,8 +92,24 @@ class State:
     recBuffer = 0.5
     rate= 44100
     chunk = 1024
+    
+    gate = 1500
+    port = 9000
+    ip = "127.0.0.1"
+    minWait = 2
+    maxWait = 6
 
     deviceId = deviceId
+    deviceName = deviceName
+    
+osc_sender = OSCTextboxSender(State.ip, State.port, State.minWait, State.maxWait)
+
+
+for i in range(0, numdevices):
+    if (p.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels')) > 0:
+        devices.append(p.get_device_info_by_host_api_device_index(0, i).get('name'))
+        dictionary[p.get_device_info_by_host_api_device_index(0, i).get('name')] = i
+p.terminate()
 
 
 def handleEvent(event: UserEvent, state: State):
@@ -114,6 +127,7 @@ def handleEvent(event: UserEvent, state: State):
 
     if event == UserEvent.GET_INPUT:
         state.deviceId = dictionary[deviceVariable.get()]
+        # state.deviceName = 
         state.PYstream, state.stream = start_audio_stream(state.deviceId, state.PYstream, state.stream)
 
     if event == UserEvent.START_TOGGLE:
@@ -124,6 +138,36 @@ def handleEvent(event: UserEvent, state: State):
         else:
             state.running = False
             startStopButton['text'] = "Start"
+    if event == UserEvent.SAVE:
+        print(state.deviceName)
+        with open('config.json', 'w') as f:
+            json.dump({
+                "deviceId": f"{state.deviceId}",
+                "gate": f"{gate.get()}",
+                "port": f"{port.get()}",
+                "ip": f"{ip.get()}",
+                "deviceName": f"{state.deviceName}",
+                "minWait": f"{state.minWait}",
+                "maxWait": f"{state.maxWait}"},
+                      f
+            )
+
+def loadConfig(state: State) -> None :
+    try:
+        with open('config.json', 'r') as f:
+            config = json.load(f)
+            state.deviceId = config['deviceId']
+            state.gate = config['gate']
+            state.port = config['port']
+            state.ip = config['ip']
+            state.deviceName = config['deviceName']
+            state.gate = config['gate']
+            state.minWait = config['minWait']
+            state.maxWait = config['maxWait']
+    except:
+        textbox.insert("\n!!!! Could not load config file !!!!")
+        pass
+    
 
 
 def STT(state: State):
@@ -262,19 +306,20 @@ root.grid_rowconfigure(0, weight=1)
 root.resizable(width = False, height = False)
 
 languageVariable = StringVar(root, languagesDropDown[0])
-deviceVariable = StringVar(root, defaultDevice['name'])
+deviceVariable = StringVar(root, State.deviceName)
 
 textboxItem = scrolledtext.ScrolledText(mainframe, width=70, height=20, state="disabled")
 textbox = LogBox(textboxItem)
-optionMenu = ttk.OptionMenu(mainframe, deviceVariable, defaultDevice['name'],  *devices, command=lambda _: events.append(UserEvent.GET_INPUT))
+optionMenu = ttk.OptionMenu(mainframe, deviceVariable, State.deviceName,  *devices, command=lambda _: events.append(UserEvent.GET_INPUT))
 optionMenuLanguage = ttk.OptionMenu(mainframe, languageVariable, languagesDropDown[0],  *languagesDropDown, command=lambda _: events.append(UserEvent.GET_LANGUAGE))
 statusLabel = ttk.Label(mainframe, foreground="Red",text=f"Running: False")
 voiceActivityLabel = ttk.Label(mainframe, foreground="Red",text=f"Voice activity: False")
 startStopButton = ttk.Button(mainframe, text="Start", command=lambda: events.append(UserEvent.START_TOGGLE))
+saveButton = ttk.Button(mainframe, text="Save", command=lambda: events.append(UserEvent.SAVE))
 
-ip = StringVar(mainframe, "127.0.0.1")
-port = IntVar(mainframe, 9000)
-gate = IntVar(mainframe, 2000)
+ip = StringVar(mainframe, f"{State.ip}")
+port = IntVar(mainframe, State.port)
+gate = IntVar(mainframe, State.gate)
 style = ttk.Style()
 
 translateVar = IntVar()
@@ -285,6 +330,7 @@ textbox.insert("- First transcription might be slow.\n- This program uses Cuda a
 style.configure("startButton", foreground="white", background="Green")
 
 startStopButton.grid(column=1, row=14, sticky="W")
+saveButton.grid(column=3, row=1, sticky="E")
 
 ttk.Label(mainframe, text="Input:").grid(column=1, row=1, sticky="SW")
 optionMenu.grid(column=1, row=2, sticky="NW")
@@ -305,11 +351,15 @@ voiceActivityLabel.grid(column=2, row=14, sticky="W")
 textboxItem.grid(column=2, row=2, columnspan=2, rowspan=11, sticky="NWSE")
 
 
+# save(State())
+
+
 for child in mainframe.winfo_children(): 
     child.grid_configure(padx=5, pady=5)
 
 # root.bind("<Return>", start)
 
 pyAudio, stream = start_audio_stream(deviceId)
+loadConfig(State(pyAudio, stream))
 root.after(100, STT, State(pyAudio, stream))
 root.mainloop()
