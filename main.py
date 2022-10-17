@@ -170,6 +170,7 @@ def loadConfig(state: State) -> None :
     
 
 
+
 def STT(state: State):
     osc_sender.update()
 
