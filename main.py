@@ -5,8 +5,6 @@ from typing import Optional
 from tkinter import *
 from tkinter import ttk
 from array import array
-
-from pip import main
 from osc_textbox_sender import OSCTextboxSender
 import whisper
 import pyaudio
